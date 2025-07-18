@@ -75,6 +75,7 @@ local Config = {
 
 local ThemeableElements = {}
 local NotificationQueue = {}
+local CurrentTheme = false
 
 local function Tween(object, properties, tweenInfo)
 	return TweenService:Create(object, tweenInfo or Config.Animation.Medium, properties)
@@ -96,26 +97,12 @@ local function CreateStroke(parent, color, thickness)
 	return stroke
 end
 
-local function CreateShadow(parent, size, transparency)
-	local shadow = Instance.new('ImageLabel')
-	shadow.Name = 'Shadow'
-	shadow.Size = UDim2.new(1, size or 20, 1, size or 20)
-	shadow.Position = UDim2.new(0, -(size or 10), 0, -(size or 10))
-	shadow.BackgroundTransparency = 1
-	shadow.Image = 'rbxasset://textures/ui/GuiImagePlaceholder.png'
-	shadow.ImageColor3 = Color3.new(0, 0, 0)
-	shadow.ImageTransparency = transparency or 0.8
-	shadow.ZIndex = parent.ZIndex - 1
-	shadow.Parent = parent.Parent
-	CreateCorner(shadow, (Config.Layout.BorderRadius or 12) + (size or 10) / 2)
-	return shadow
-end
-
 local function RegisterThemeableElement(element, properties)
 	table.insert(ThemeableElements, {element = element, properties = properties})
 end
 
 local function UpdateTheme(isDark)
+	CurrentTheme = isDark
 	local colors = isDark and Config.Colors.Dark or Config.Colors.Light
 	for _, data in ipairs(ThemeableElements) do
 		if data.element and data.element.Parent then
@@ -134,11 +121,11 @@ local function CreateNotification(message, notificationType, duration)
 	duration = duration or 4
 	
 	local notifGui = Instance.new('ScreenGui')
-	notifGui.Name = 'Luno_Notification'
+	notifGui.Name = 'Luno_Notification_' .. tick()
 	notifGui.Parent = CoreGui
 	notifGui.ResetOnSpawn = false
 	
-	local colors = Config.Colors.Light
+	local colors = CurrentTheme and Config.Colors.Dark or Config.Colors.Light
 	local iconMap = {
 		info = {icon = "ℹ", color = colors.Primary},
 		success = {icon = "✓", color = colors.Success},
@@ -154,13 +141,9 @@ local function CreateNotification(message, notificationType, duration)
 	notification.BackgroundColor3 = colors.Surface
 	notification.BorderSizePixel = 0
 	notification.Parent = notifGui
-	notification.ZIndex = 10
+	notification.ZIndex = 100
 	CreateCorner(notification, 8)
 	CreateStroke(notification, colors.Border, 1)
-	CreateShadow(notification, 12, 0.1)
-	
-	RegisterThemeableElement(notification, {BackgroundColor3 = "Surface"})
-	RegisterThemeableElement(notification:FindFirstChild('UIStroke'), {Color = "Border"})
 	
 	local accent = Instance.new('Frame')
 	accent.Size = UDim2.new(0, 3, 1, -12)
@@ -168,6 +151,7 @@ local function CreateNotification(message, notificationType, duration)
 	accent.BackgroundColor3 = notifData.color
 	accent.BorderSizePixel = 0
 	accent.Parent = notification
+	accent.ZIndex = 101
 	CreateCorner(accent, 2)
 	
 	local iconFrame = Instance.new('Frame')
@@ -177,6 +161,7 @@ local function CreateNotification(message, notificationType, duration)
 	iconFrame.BackgroundTransparency = 0.9
 	iconFrame.BorderSizePixel = 0
 	iconFrame.Parent = notification
+	iconFrame.ZIndex = 101
 	CreateCorner(iconFrame, 16)
 	
 	local icon = Instance.new('TextLabel')
@@ -189,6 +174,7 @@ local function CreateNotification(message, notificationType, duration)
 	icon.TextXAlignment = Enum.TextXAlignment.Center
 	icon.TextYAlignment = Enum.TextYAlignment.Center
 	icon.Parent = iconFrame
+	icon.ZIndex = 102
 	
 	local text = Instance.new('TextLabel')
 	text.Size = UDim2.new(1, -90, 1, -12)
@@ -202,8 +188,7 @@ local function CreateNotification(message, notificationType, duration)
 	text.TextYAlignment = Enum.TextYAlignment.Center
 	text.TextWrapped = true
 	text.Parent = notification
-	
-	RegisterThemeableElement(text, {TextColor3 = "Text"})
+	text.ZIndex = 101
 	
 	local closeBtn = Instance.new('TextButton')
 	closeBtn.Size = UDim2.new(0, 20, 0, 20)
@@ -215,9 +200,8 @@ local function CreateNotification(message, notificationType, duration)
 	closeBtn.Font = Config.Fonts.Medium
 	closeBtn.BorderSizePixel = 0
 	closeBtn.Parent = notification
+	closeBtn.ZIndex = 102
 	CreateCorner(closeBtn, 10)
-	
-	RegisterThemeableElement(closeBtn, {TextColor3 = "TextMuted"})
 	
 	local progress = Instance.new('Frame')
 	progress.Size = UDim2.new(1, -12, 0, 2)
@@ -225,6 +209,7 @@ local function CreateNotification(message, notificationType, duration)
 	progress.BackgroundColor3 = colors.Surface3
 	progress.BorderSizePixel = 0
 	progress.Parent = notification
+	progress.ZIndex = 101
 	CreateCorner(progress, 1)
 	
 	local progressFill = Instance.new('Frame')
@@ -232,9 +217,8 @@ local function CreateNotification(message, notificationType, duration)
 	progressFill.BackgroundColor3 = notifData.color
 	progressFill.BorderSizePixel = 0
 	progressFill.Parent = progress
+	progressFill.ZIndex = 102
 	CreateCorner(progressFill, 1)
-	
-	RegisterThemeableElement(progress, {BackgroundColor3 = "Surface3"})
 	
 	notification.Position = UDim2.new(1, 20, 0, 20 + (#NotificationQueue * 76))
 	Tween(notification, {Position = UDim2.new(1, -380, 0, 20 + (#NotificationQueue * 76))}, Config.Animation.Spring):Play()
@@ -245,7 +229,9 @@ local function CreateNotification(message, notificationType, duration)
 	progressTween:Play()
 	
 	local function dismiss()
-		Tween(notification, {Position = UDim2.new(1, 20, 0, 20 + (#NotificationQueue * 76))}, Config.Animation.Medium):Play()
+		if not notification.Parent then return end
+		
+		Tween(notification, {Position = UDim2.new(1, 20, 0, notification.Position.Y.Offset)}, Config.Animation.Medium):Play()
 		task.wait(0.25)
 		
 		for i, item in ipairs(NotificationQueue) do
@@ -254,7 +240,16 @@ local function CreateNotification(message, notificationType, duration)
 				break
 			end
 		end
-		notifGui:Destroy()
+		
+		if notifGui and notifGui.Parent then
+			notifGui:Destroy()
+		end
+		
+		for i, item in ipairs(NotificationQueue) do
+			if item.notification and item.notification.Parent then
+				Tween(item.notification, {Position = UDim2.new(1, -380, 0, 20 + ((i-1) * 76))}, Config.Animation.Fast):Play()
+			end
+		end
 	end
 	
 	closeBtn.MouseButton1Click:Connect(dismiss)
@@ -314,7 +309,6 @@ function Luno:CreateWindow(title, size)
 	main.ZIndex = 1
 	CreateCorner(main, Config.Layout.BorderRadius)
 	CreateStroke(main, window:getColors().Border, 1)
-	CreateShadow(main, 20, 0.15)
 	window._main = main
 	
 	RegisterThemeableElement(main, {BackgroundColor3 = "Background"})
@@ -528,7 +522,9 @@ function Luno:CreateWindow(title, size)
 		tabBtn.MouseButton1Click:Connect(function()
 			for _, p in pairs(window.Pages) do
 				p._frame.Visible = false
-				Tween(p._button, {BackgroundColor3 = window:getColors().Surface2, TextColor3 = window:getColors().TextSecondary}, Config.Animation.Fast):Play()
+				if p._button then
+					Tween(p._button, {BackgroundColor3 = window:getColors().Surface2, TextColor3 = window:getColors().TextSecondary}, Config.Animation.Fast):Play()
+				end
 			end
 			pageFrame.Visible = true
 			Tween(tabBtn, {BackgroundColor3 = window:getColors().Primary, TextColor3 = Color3.new(1, 1, 1)}, Config.Animation.Fast):Play()
@@ -628,8 +624,6 @@ function Luno:CreateWindow(title, size)
 			toggle.ZIndex = 3
 			CreateCorner(toggle, 10)
 			
-			RegisterThemeableElement(toggle, {BackgroundColor3 = value and "Primary" or "Surface3"})
-			
 			local thumb = Instance.new('Frame')
 			thumb.Size = UDim2.new(0, 16, 0, 16)
 			thumb.Position = value and UDim2.new(1, -18, 0.5, -8) or UDim2.new(0, 2, 0.5, -8)
@@ -638,6 +632,8 @@ function Luno:CreateWindow(title, size)
 			thumb.Parent = toggle
 			thumb.ZIndex = 4
 			CreateCorner(thumb, 8)
+			
+			RegisterThemeableElement(toggle, {BackgroundColor3 = value and "Primary" or "Surface3"})
 			
 			toggle.MouseButton1Click:Connect(function()
 				value = not value
@@ -745,17 +741,20 @@ function Luno:CreateWindow(title, size)
 				end
 			end)
 			
-			UserInputService.InputChanged:Connect(function(input)
+			local connection1 = UserInputService.InputChanged:Connect(function(input)
 				if input.UserInputType == Enum.UserInputType.MouseMovement and dragging then
 					updateSlider(input)
 				end
 			end)
 			
-			UserInputService.InputEnded:Connect(function(input)
+			local connection2 = UserInputService.InputEnded:Connect(function(input)
 				if input.UserInputType == Enum.UserInputType.MouseButton1 then
 					dragging = false
 				end
 			end)
+			
+			table.insert(window._connections, connection1)
+			table.insert(window._connections, connection2)
 			
 			table.insert(page.Elements, container)
 			return container, function() return value end
@@ -802,13 +801,13 @@ function Luno:CreateWindow(title, size)
 			dropdown.ClipsDescendants = true
 			dropdown.AutoButtonColor = false
 			dropdown.Parent = container
-			dropdown.ZIndex = 4
+			dropdown.ZIndex = 10
 			CreateCorner(dropdown, Config.Layout.BorderRadius - 2)
 			
 			RegisterThemeableElement(dropdown, {BackgroundColor3 = "Surface2"})
 			
 			local valueText = Instance.new('TextLabel')
-			valueText.Text = dropdownType == "multi" and "Select..." or value
+			valueText.Text = dropdownType == "multi" and "Select..." or tostring(value)
 			valueText.Size = UDim2.new(1, -24, 1, 0)
 			valueText.Position = UDim2.new(0, 8, 0, 0)
 			valueText.BackgroundTransparency = 1
@@ -816,7 +815,7 @@ function Luno:CreateWindow(title, size)
 			valueText.TextSize = 12
 			valueText.Font = Config.Fonts.Regular
 			valueText.TextXAlignment = Enum.TextXAlignment.Left
-			valueText.ZIndex = 4
+			valueText.ZIndex = 11
 			valueText.Parent = dropdown
 			
 			RegisterThemeableElement(valueText, {TextColor3 = "Text"})
@@ -830,7 +829,7 @@ function Luno:CreateWindow(title, size)
 			arrow.TextSize = 8
 			arrow.Font = Config.Fonts.Regular
 			arrow.Parent = dropdown
-			arrow.ZIndex = 4
+			arrow.ZIndex = 11
 			
 			RegisterThemeableElement(arrow, {TextColor3 = "TextMuted"})
 			
@@ -846,7 +845,7 @@ function Luno:CreateWindow(title, size)
 			optionsList.BackgroundColor3 = window:getColors().Surface
 			optionsList.BorderSizePixel = 0
 			optionsList.Visible = false
-			optionsList.ZIndex = 5
+			optionsList.ZIndex = 15
 			optionsList.Parent = container
 			CreateCorner(optionsList, Config.Layout.BorderRadius - 2)
 			CreateStroke(optionsList, window:getColors().BorderLight)
@@ -884,7 +883,7 @@ function Luno:CreateWindow(title, size)
 				optionBtn.BackgroundColor3 = window:getColors().Surface
 				optionBtn.BackgroundTransparency = 1
 				optionBtn.BorderSizePixel = 0
-				optionBtn.Text = option
+				optionBtn.Text = tostring(option)
 				optionBtn.TextColor3 = window:getColors().Text
 				optionBtn.TextSize = 12
 				optionBtn.Font = Config.Fonts.Regular
@@ -892,7 +891,7 @@ function Luno:CreateWindow(title, size)
 				optionBtn.LayoutOrder = i
 				optionBtn.AutoButtonColor = false
 				optionBtn.Parent = optionsList
-				optionBtn.ZIndex = 5
+				optionBtn.ZIndex = 16
 				
 				local padding = Instance.new("UIPadding")
 				padding.PaddingLeft = UDim.new(0, 8)
@@ -906,7 +905,7 @@ function Luno:CreateWindow(title, size)
 					divider.Position = UDim2.new(0, 8, 0, -1)
 					divider.BackgroundColor3 = window:getColors().BorderLight
 					divider.BorderSizePixel = 0
-					divider.ZIndex = 5
+					divider.ZIndex = 16
 					divider.Parent = optionBtn
 					
 					RegisterThemeableElement(divider, {BackgroundColor3 = "BorderLight"})
@@ -951,7 +950,7 @@ function Luno:CreateWindow(title, size)
 						if callback then callback(value) end
 					else
 						value = option
-						valueText.Text = option
+						valueText.Text = tostring(option)
 						toggleDropdown()
 						if callback then callback(option) end
 					end
@@ -962,6 +961,7 @@ function Luno:CreateWindow(title, size)
 			return container, function() return value end
 		end
 		
+		table.insert(window.Pages, page)
 		window.Pages[name] = page
 		
 		if not window.CurrentPage then
@@ -975,7 +975,9 @@ function Luno:CreateWindow(title, size)
 	
 	function window:Destroy()
 		for _, connection in pairs(window._connections) do
-			connection:Disconnect()
+			if connection then
+				connection:Disconnect()
+			end
 		end
 		
 		for i = #ThemeableElements, 1, -1 do
@@ -985,7 +987,9 @@ function Luno:CreateWindow(title, size)
 			end
 		end
 		
-		window._gui:Destroy()
+		if window._gui and window._gui.Parent then
+			window._gui:Destroy()
+		end
 	end
 	
 	main.Size = UDim2.new(0, 0, 0, 0)
@@ -1004,7 +1008,7 @@ function Luno:DestroyAll()
 	end
 	
 	for _, item in ipairs(NotificationQueue) do
-		if item.gui then
+		if item.gui and item.gui.Parent then
 			pcall(function() item.gui:Destroy() end)
 		end
 	end
